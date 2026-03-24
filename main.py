@@ -8,8 +8,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFil
 from aiohttp import web
 import yt_dlp
 
-# --- الإعدادات الأساسية ---
-API_TOKEN = '8636877850:AAEDfyWzZgyPZ0QadGmooMM04YiVQan8z1o' 
+# --- الإعدادات الأساسية (تعديلك هنا فقط) ---
+API_TOKEN = 'ضع_التوكن_هنا' 
 CHANNEL_ID = '@Ramy_Premium'
 CHANNEL_LINK = 'https://t.me/Ramy_Premium'
 
@@ -24,22 +24,19 @@ async def check_subscription(user_id):
     except:
         return False
 
-# --- لوحة أزرار الاشتراك الإجباري (تصميم جميل) ---
+# --- الأزرار ---
 def subscription_keyboard():
-    buttons = [
+    return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 انضم لقناتنا أولاً", url=CHANNEL_LINK)],
         [InlineKeyboardButton(text="✅ تم الاشتراك، ابدأ الآن", callback_data="check_sub")]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+    ])
 
-# --- لوحة أزرار المتجر (تظهر مع الفيديو) ---
 def store_keyboard():
-    buttons = [
-        [InlineKeyboardButton(text="🛒 متجر رامي بريميوم (Netflix/Spotify)", url=CHANNEL_LINK)]
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🛒 متجر رامي (Netflix/Spotify)", url=CHANNEL_LINK)]
+    ])
 
-# --- دالة التحميل الذكية ---
+# --- دالة التحميل ---
 def download_media(url):
     unique_filename = f"ramy_dl_{uuid.uuid4().hex}.mp4"
     ydl_opts = {
@@ -52,89 +49,58 @@ def download_media(url):
         ydl.download([url])
         return unique_filename
 
-# --- معالجة أمر البداية /start ---
+# --- الأوامر ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    is_sub = await check_subscription(message.from_user.id)
-    if not is_sub:
-        await message.answer(
-            f"👋 أهلاً بك يا {message.from_user.first_name}!\n\n"
-            "⚠️ لاستخدام البوت وتحميل الفيديوهات من (TikTok, Instagram, Facebook)، "
-            "يجب عليك الاشتراك في قناة المتجر الرسمية أولاً. 👇",
-            reply_markup=subscription_keyboard()
-        )
+    if await check_subscription(message.from_user.id):
+        await message.answer(f"🌟 أهلاً بك يا {message.from_user.first_name}!\n\nأرسل رابط فيديو (تيك توك، إنستا، فيسبوك) للتحميل فوراً. 🔥", reply_markup=store_keyboard())
     else:
-        await message.answer(
-            f"🌟 أهلاً بك مجدداً!\n\n"
-            "قم بإرسال رابط الفيديو الآن وسأقوم بتحميله لك فوراً بأعلى جودة. 🎬🔥",
-            reply_markup=store_keyboard()
-        )
+        await message.answer(f"👋 أهلاً بك!\n\nلاستخدام البوت، يجب الاشتراك في القناة أولاً: 👇", reply_markup=subscription_keyboard())
 
-# --- معالجة زر "تم الاشتراك" ---
 @dp.callback_query(lambda c: c.data == "check_sub")
 async def process_check_sub(callback_query: types.CallbackQuery):
     if await check_subscription(callback_query.from_user.id):
-        await bot.answer_callback_query(callback_query.id, text="شكرًا لانضمامك! تم تفعيل البوت. ✅")
-        await bot.send_message(
-            callback_query.from_user.id, 
-            "تم التحقق بنجاح! 🎉\nأرسل رابط الفيديو الذي تريد تحميله الآن. 👇"
-        )
+        await callback_query.message.edit_text("تم التفعيل! أرسل الرابط الآن. ✅")
     else:
-        await bot.answer_callback_query(
-            callback_query.id, 
-            text="⚠️ يبدو أنك لم تشترك في القناة بعد، يرجى الانضمام أولاً!", 
-            show_alert=True
-        )
+        await callback_query.answer("⚠️ لم تشترك بعد!", show_alert=True)
 
-# --- معالجة الروابط (التحميل الشامل) ---
+# --- معالجة الروابط والتحميل ---
 @dp.message()
 async def handle_links(message: types.Message):
     if not message.text: return
     
-    # التحقق من أن الرابط مدعوم
-    supported_sites = ["tiktok.com", "instagram.com", "facebook.com", "fb.watch"]
-    if not any(site in message.text for site in supported_sites):
+    supported = ["tiktok.com", "instagram.com", "facebook.com", "fb.watch"]
+    if not any(site in message.text for site in supported):
         return
 
-    # التحقق من الاشتراك قبل التحميل
     if not await check_subscription(message.from_user.id):
-        await message.answer("❌ لا يمكنك التحميل! اشترك في القناة أولاً لفتح الخدمة:", reply_markup=subscription_keyboard())
+        await message.answer("❌ اشترك أولاً:", reply_markup=subscription_keyboard())
         return
 
-    waiting_msg = await message.answer("⏳ جاري سحب الفيديو من المنصة... انتظر قليلاً")
+    m = await message.answer("⏳ جاري التحميل... انتظر لحظة")
     
     try:
-        video_path = await asyncio.to_thread(download_media, message.text)
-        
+        path = await asyncio.to_thread(download_media, message.text)
         await message.answer_video(
-            video=FSInputFile(video_path),
-            caption=f"✅ تم التحميل بنجاح!\n\n🚀 بواسطة: @{bot.username}\n🛒 متجرنا: {CHANNEL_ID}",
+            video=FSInputFile(path),
+            caption=f"✅ تم التحميل بنجاح!\n\n🛒 متجر رامي: {CHANNEL_ID}",
             reply_markup=store_keyboard()
         )
-        
-        if os.path.exists(video_path):
-            os.remove(video_path)
-        await waiting_msg.delete()
-        
+        if os.path.exists(path): os.remove(path)
+        await m.delete()
     except Exception as e:
         logging.error(e)
-        await waiting_msg.edit_text("❌ عذراً، حدث خطأ أثناء التحميل. تأكد أن الرابط عام وليس لحساب خاص.")
+        await m.edit_text("❌ خطأ! تأكد أن الحساب عام (Public).")
 
-# --- نظام استقرار سيرفر Render ---
-async def handle(request):
-    return web.Response(text="The Universal Bot is running perfectly! ✅")
-
-async def start_web_server():
+# --- استقرار Render ---
+async def handle(request): return web.Response(text="Bot is Live! ✅")
+async def main():
     app = web.Application()
     app.router.add_get('/', handle)
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.getenv('PORT', 8080))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-
-async def main():
-    asyncio.create_task(start_web_server())
+    await web.TCPSite(runner, '0.0.0.0', port).start()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
